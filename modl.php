@@ -10,10 +10,10 @@ class Modl {
 	public static $configuration = 'default';
 	private static $connection;
 
-	/**
-	 *
-	 * */
 
+	/**
+	* Instancie la bonne connection et récupère les infos des champs de la table
+	**/
 	private function __construct() {
 		$this->connection = ConnectionManager::getInstance()->getConnection($this->configuration);
 		$query = 'DESCRIBE `' . $this->database . '`.`' . $this->table . '`';
@@ -28,6 +28,7 @@ class Modl {
 		}
 	}
 
+
 	public static function getInstance(){
 		if(!isset(self::$instance)){
 			self::$instance = new static();
@@ -39,36 +40,29 @@ class Modl {
 	/**
 	 * Permet une lecture rapide d'un modèle grace à son identifiant
 	 * */
-	public function get($id) {
+	public function read($id) {
 		if(empty($id)){
 			throw new Exception('Id must be specified');
 		}
 		$query = 'SELECT * FROM `' . $this->database . '`.`' . $this->table . '` WHERE `' . $this->key . '` = ?';
 		if (($statement = $this->connection->prepare($query)->execute($values)) != false) {
 			$data = $statement->fetchAll(\PDO::FETCH_ASSOC);
-			return EntityManager::getInstance()->create($data[0]);
+			return $data[0];
 		}else{
 			return false;
 		}
 	}
 
 
-	protected function extractDataFromEntity($entity){
-		$data = array();
-		$fields = get_object_vars($entity);
-		foreach($fields as $field => $value){
-			if(isset($this->fields[$field])){
-				$data[$field] = $value;
-			}
-		}
-		return $data;
-	}
-
-	public function insert($entity){
+	public function insert($data){
 		if(!$entity instanceOf Entity){
 			throw new Exception('Not an entity');
 		}
-		$data = $this->extractDataFromEntity($entity);
+		foreach($data as $field => $value){
+			if(!isset($this->fields[$field])){
+				unset($data[$field]);
+			}
+		}
 		if(empty($data)){
 			throw new Exception('Empty data');
 		}
@@ -93,7 +87,11 @@ class Modl {
 		if(!$entity instanceOf Entity){
 			throw new Exception('Not an entity');
 		}
-		$data = $this->extractDataFromEntity($entity);
+		foreach($data as $field => $value){
+			if(!isset($this->fields[$field])){
+				unset($data[$field]);
+			}
+		}
 		// Key is not specified
 		if(!isset($data[$this->key])){
 			throw new Exception('Primary key must be specified');
@@ -122,66 +120,38 @@ class Modl {
 		}
 	}
 
+	/**
+	* Retourne plusieurs lignes de résultats
+	**/
 	public function find($options = array()) {
-		$conditions = '1=1';
-		$fields = '*';
-		if (!empty($this->fields)) {
-			$fields = '';
-			foreach ($this->fields as $fieldName => $informations) {
-				$fields .= $this->table . '.' . $fieldName . ' as ' . get_Class($this) . '_' . $fieldName . ', ';
-			}
-			$fields = substr($fields, 0, -2);
-		}
-		$limit = '';
-		$order = $this->table . '.' . $this->key . ' ASC';
-		$left_outer = '';
-		//
-		if (!empty($this->belongsTo)) {
-			foreach ($this->belongsTo as $modelName) {
-				$model = $this->load($modelName);
-				//E.G. : , posts.id as post_id
-				$fields .= ', ' . $model->table . '.' . $model->key . ' as ' . $modelName . '_' . $model->key;
-				$fields .= ', ' . $model->table . '.' . $model->displayField . ' as ' . $modelName . '_' . $model->displayField;
-				$left_outer .= ' LEFT OUTER JOIN ' . $model->table . ' ON ' . $this->table . '.' . $modelName . '_id = ' . $model->table . '.id';
+		$qb = $this->getQueryBuilder();
+		$qb->select('[' . $this->getClass() . '.*]');
+		if(!empty($options['condition'])){
+			foreach($options['condition'] as $condition){
+				$qb->where($condition[0], $condition[1], $condition[2]);
 			}
 		}
-		//
-		if (!empty($options['conditions'])) {
-			$conditions = $options['conditions'];
-		}
-		if (!empty($options['fields'])) {
-			$fields = $options['fields'];
-		}
-		if (!empty($options['limit'])) {
-			$limit = ' LIMIT ' . $options['limit'];
-		}
-		if (!empty($options['order'])) {
-			$order = $this->table . '.' . $options['order'];
-		}
-		$query = 'SELECT ' . $fields . ' FROM ' . $this->table . $left_outer . ' WHERE ' . $conditions . ' ORDER BY ' . $order . $limit;
-		$results = mysql_query($query) or die(mysql_error());
-		if (mysql_num_rows($results)) {
-			$i = 0;
-			while ($row = mysql_fetch_assoc($results)) {
-				foreach ($row as $fieldName => $value) {
-					$pos = strpos($fieldName, '_');
-					$prefix = substr($fieldName, 0, $pos);
-					$sufix = substr($fieldName, $pos + 1, strlen($fieldName));
-					if ($prefix == get_Class($this)) {
-						$data[$i][$sufix] = $value;
-					} else {
-						$data[$i][$prefix][$sufix] = $value;
-					}
-				}
-				$i++;
+		if(!empty($option['order'])){
+			foreach($options['order'] as $order){
+				$qb->order($condition[0], $condition[1]);
 			}
-			return $data;
-		} else {
-			return false;
 		}
+		if(!empty($option['limit'])){
+			$qb->limit()
+		}
+
+
 	}
 
-	 public static function delete($id = null) {
+	public function getQueryBuilder(){
+		$qb = new QueryBuilder();
+		if(!empty($this->table)){
+			$qb->from('[' . $this->getClass() . ']');
+		}
+		return $qb;
+	}
+
+	 public static function delete($id) {
 		if ( empty($id) ) {
 			throw new Exception('Missing argument for delete method');
 		}

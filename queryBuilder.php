@@ -113,9 +113,8 @@ class QueryBuilder {
 	public $connection;
 
 
-	public function __construct($connection){
-
-		$this->connection = $connection;
+	public function __construct($modl){
+		if()
 	}
 
 	public function Context($context = array()){
