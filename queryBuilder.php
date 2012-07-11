@@ -1,106 +1,6 @@
 <?php
 class QueryBuilder {
 
-    public $schemas = array(
-		// QDFX
-		'kpi' => array(
-			'table' => 'qdfx_kpi_dsl_if_cisco_quarter',
-			'parents' => array(
-				'interface' => array(
-					'from' => 'ne',
-					'target' => 'id_interface'
-				)
-			)
-		),
-		'interface' => array(
-			'table' => 'qdfx_interfaces',
-			'parents' => array(
-				'equipment' => array(
-					'from' => 'id_eq',
-					'target' => 'id_eq'
-				)
-			)
-		),
-		'equipment' => array(
-			'table' => 'qdfx_equipments',
-			'parents' => array(
-			)
-		),
-
-		// PA
-		'flow' => array(
-			'table' => 'performanceFlows',
-			'parents' => array(
-				'router' => array(
-					'from' => 'routerIP',
-					'target' => 'ip'
-					),
-				'nbar' => array(
-					'from' => 'APPLICATION_ID',
-					'target' => 'APPLICATION_ID'
-					)
-				)
-			),
-		'nbar' => array(
-			'table' => 'applicationMappingNBAR',
-			'parents' => array(
-				'nbar_groups_mapping' => array(
-					'from' => 'APPLICATION_ID',
-					'target' => 'nbar'
-					)
-				)
-			),
-		'nbar_groups' => array(
-			'table' => 'nbar_groups',
-			'parents' => array(
-				)
-			),
-		'nbar_groups_mapping' => array(
-			'table' => 'nbar_groups_mapping',
-			'parents' => array(
-				'nbar_groups' => array(
-					'from' => 'nbar_groups',
-					'target' => 'id'
-					)
-				)
-			),
-		'app' => array(
-			'table' => 'applications',
-			'parents' => array(
-				)
-			),
-		'custom_app' => array(
-			'table' => 'custom_application',
-			'parents' => array(
-				)
-			),
-		'custom_app_def' => array(
-			'table' => 'custom_application_condition',
-			'parents' => array(
-				'custom_app' => array(
-					'from' => 'custom_application',
-					'target' => 'id'
-					)
-				)
-			),
-		'router' => array(
-			'table' => 'router',
-			'key' => 'ip',
-			'parents' => array(
-				'place' => array(
-					'from' => 'place',
-					'target' => 'id'
-					)
-				)
-			),
-		'place' => array(
-			'table' => 'place',
-			'key' => 'id',
-			'parents' => array(
-				)
-			)
-		);
-
 	public $select = array();
 	public $from;
 	public $join = array();
@@ -113,112 +13,12 @@ class QueryBuilder {
 	public $connection;
 
 
-	public function __construct($modl){
-		if()
+	public function __construct(){
+
 	}
 
-	public function Context($context = array()){
-		foreach ($context as $key => $value) {
-			switch($key){
-				case 'place':
-					$this->Where('[place.' . (is_numeric($value) ? 'id' : 'name') . ']', '=', $value);
-				break;
-				case 'router':
-					$this->Where('[router.ip]', '=', $value);
-				break;
-				case 'user':
-					$this->Where('[flow.SOURCE_IP]', '=', $value);
-				break;
-				case 'nbar':
-					$this->Where('[flow.APPLICATION_ID]', '=', $value);
-				break;
-				case 'multinbar':
-					$this->Where('[flow.APPLICATION_ID]', 'IN', $value);
-				break;
-				case 'group':
-					$this->Where('[nbar_groups_mapping.nbar_groups]', '=', $value);
-				break;
-				case 'app':
-					$self = get_class($this);
-					$qb = new $self($this->connection);
-					$conditions = $qb->Select('[app.http]')
-					->Select('[app.ip]')
-					->Select('[app.port]')
-					->Select('[app.nbar]')
-					->From('app')
-					->Where('[app.id]', '=', $value)
-					->Exec();
-					$conditions = $conditions[0];
-					foreach ($conditions as $key => $value) {
-						$ignore = false;
-						if(!empty($value)){
-							switch ($key) {
-								case 'ip':
-									$field = '[flow.DEST_IP]';
-								break;
-								case 'nbar':
-									$field = '[flow.APPLICATION_ID]';
-								break;
-								case 'port':
-									$field = '[flow.DEST_PORT]';
-								break;
-								default:
-									$ignore = true;
-								break;
-							}
-						}else{
-							$ignore = true;
-						}
-						if(!$ignore){
-							$this->Where($field, '=', $value);
-						}
-					}
-				break;
-				case 'application':
-					$self = get_class($this);
-					$qb = new $self($this->connection);
-					$conditions = $qb->Select('[custom_app_def.field]')
-					->Select('[custom_app_def.operator]')
-					->Select('[custom_app_def.value]')
-					->From('custom_app_def')
-					->Where('[custom_app.' . (is_numeric($value) ? 'id' : 'name') . ']', '=', $value)
-					->Exec();
-					foreach ($conditions as $condition) {
-						if($condition['operator'] == 'IN' || $condition['operator'] == 'NOT IN'){
-							$condition['value'] = explode(',', $condition['value']);
-						}
-						$this->Where($condition['field'], $condition['operator'], $condition['value']);
-					}
-				break;
-				case 'interval':
-					$start = time();
-					$end = $start;
-					if(!is_array($value)){
-						switch($value){
-							case 'hour':
-								$start -= 3600;
-							break;
-							case 'day':
-								$start -= 86400;
-							break;
-							case 'week':
-								$start -= 604800;
-							break;
-							case 'month':
-								$start -= 2592000;
-							break;
-						}
-						$start = date('Y-m-d H:i:s', $start);
-						$end = date('Y-m-d H:i:s', $end);
-					}else{
-						$start = $value['start'];
-						$end = $value['end'];
-					}
-					$this->Where('[flow.datetime]', 'BETWEEN', array($start, $end));
-				break;
-			}
-		}
-		return $this;
+	public function setDefaultNamespace($namespace){
+		$this->defaultNamespace = '\\' . trim(trim($namespace), '\\') . '\\';
 	}
 
 	public function flush(){
@@ -241,6 +41,7 @@ class QueryBuilder {
 		$return = array();
 		foreach ($matches as $match) {
 			$string = str_replace($match[0], '`' . $match[1] . '`.`' . $match[2] . '`', $string);
+			$this->defaultNamespace .
 			$this->Table($match[1]);
 		}
 		return $string;
